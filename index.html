@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin — Quality Muffler</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body { background: #0a0a0a; color: white; font-family: 'Segoe UI', system-ui, sans-serif; margin: 0; min-height: 100vh; }
+    .lavender { color: #c4b5fd; }
+    .card { background: rgba(255,255,255,0.04); border: 1px solid rgba(196,181,253,0.2); border-radius: 1rem; }
+    .btn-lav { background: linear-gradient(135deg, #7c3aed, #a78bfa, #7c3aed); color: white; font-weight: 700; transition: all 0.2s; box-shadow: 0 4px 16px rgba(167,139,250,0.25); border: none; cursor: pointer; padding: 10px 20px; border-radius: 10px; }
+    .btn-lav:hover { filter: brightness(1.1); }
+    .btn-danger { background: rgba(239,68,68,0.15); border: 1px solid rgba(239,68,68,0.4); color: #fca5a5; font-weight: 600; cursor: pointer; padding: 6px 10px; border-radius: 8px; font-size: 0.8rem; transition: all 0.2s; }
+    .btn-danger:hover { background: rgba(239,68,68,0.25); }
+    .btn-edit { background: rgba(167,139,250,0.15); border: 1px solid rgba(167,139,250,0.3); color: #c4b5fd; font-weight: 600; cursor: pointer; padding: 6px 10px; border-radius: 8px; font-size: 0.8rem; transition: all 0.2s; }
+    .btn-edit:hover { background: rgba(167,139,250,0.25); }
+    .btn-restock { background: rgba(74,222,128,0.15); border: 1px solid rgba(74,222,128,0.35); color: #4ade80; font-weight: 700; cursor: pointer; padding: 6px 10px; border-radius: 8px; font-size: 0.85rem; transition: all 0.2s; }
+    .btn-restock:hover { background: rgba(74,222,128,0.25); }
+    .btn-print { background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.15); color: rgba(255,255,255,0.6); font-weight: 600; cursor: pointer; padding: 8px 16px; border-radius: 10px; font-size: 0.85rem; transition: all 0.2s; }
+    .btn-print:hover { background: rgba(255,255,255,0.12); color: white; }
+    .filter-btn { padding: 7px 16px; border-radius: 999px; font-size: 0.82rem; font-weight: 600; cursor: pointer; transition: all 0.2s; border: 1px solid rgba(196,181,253,0.2); color: rgba(255,255,255,0.45); background: transparent; }
+    .filter-btn.active { background: rgba(239,68,68,0.15); border-color: rgba(239,68,68,0.5); color: #fca5a5; }
+    .filter-btn:hover:not(.active) { border-color: rgba(196,181,253,0.4); color: white; }
+    .inp { background: rgba(255,255,255,0.07); border: 1px solid rgba(196,181,253,0.25); color: white; padding: 10px 14px; border-radius: 10px; width: 100%; font-size: 0.95rem; transition: border-color 0.2s; }
+    .inp:focus { outline: none; border-color: #a78bfa; background: rgba(255,255,255,0.1); }
+    .inp::placeholder { color: rgba(255,255,255,0.25); }
+    select.inp option { background: #1a1a1a; color: white; }
+    .item-row { display: flex; align-items: center; gap-2; padding: 12px 16px; border-bottom: 1px solid rgba(255,255,255,0.05); flex-wrap: wrap; }
+    .item-row:last-child { border-bottom: none; }
+    #loginScreen { display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+    #mainScreen { display: none; }
+    .modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 100; display: flex; align-items: center; justify-content: center; padding: 1rem; }
+    .modal { background: #111; border: 1px solid rgba(196,181,253,0.25); border-radius: 1.25rem; padding: 1.5rem; width: 100%; max-width: 420px; }
+    label { display: block; color: rgba(255,255,255,0.5); font-size: 0.8rem; font-weight: 600; margin-bottom: 5px; }
+
+    @media print {
+      body { background: white; color: black; }
+      #printArea { display: block !important; }
+      #mainScreen > *:not(#printArea) { display: none !important; }
+      .no-print { display: none !important; }
+      .print-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+      .print-table th { background: #e9d5ff; color: #4c1d95; padding: 8px; text-align: left; border: 1px solid #ccc; }
+      .print-table td { padding: 7px 8px; border: 1px solid #ddd; }
+      .print-table tr:nth-child(even) td { background: #f9f6ff; }
+      .low-print { color: #dc2626; font-weight: bold; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Login -->
+  <div id="loginScreen">
+    <div class="card p-8 w-full max-w-sm mx-4">
+      <h1 class="text-2xl font-black lavender mb-1">Quality Muffler</h1>
+      <p class="text-white/40 text-sm mb-6">Admin Panel</p>
+      <label>Password</label>
+      <input id="pwInput" type="password" class="inp mb-4" placeholder="Enter password" onkeydown="if(event.key==='Enter')login()">
+      <p id="pwErr" class="text-red-400 text-xs mb-3 hidden">Incorrect password.</p>
+      <button onclick="login()" class="btn-lav w-full">Sign In</button>
+    </div>
+  </div>
+
+  <!-- Main -->
+  <div id="mainScreen" class="max-w-3xl mx-auto px-4 py-8">
+
+    <!-- Header -->
+    <div class="flex items-center justify-between mb-8 flex-wrap gap-4 no-print">
+      <div>
+        <h1 class="text-3xl font-black lavender">Inventory Admin</h1>
+        <p class="text-white/30 text-sm">Quality Muffler</p>
+      </div>
+      <div class="flex gap-3 flex-wrap">
+        <button onclick="printInventory()" class="btn-print">🖨 Print</button>
+        <button onclick="openAdd()" class="btn-lav">+ Add Item</button>
+        <button onclick="logout()" class="text-white/30 hover:text-white text-sm transition-colors">Sign out</button>
+      </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="grid grid-cols-2 gap-4 mb-6 no-print">
+      <div class="card p-4 text-center">
+        <div id="statTotal" class="text-2xl font-black lavender">—</div>
+        <div class="text-white/40 text-xs mt-1">Total Items</div>
+      </div>
+      <div class="card p-4 text-center">
+        <div id="statLow" class="text-2xl font-black text-red-400">—</div>
+        <div class="text-white/40 text-xs mt-1">Low Stock</div>
+      </div>
+    </div>
+
+    <!-- Filters & Search -->
+    <div class="flex gap-3 mb-3 flex-wrap no-print">
+      <input id="search" type="text" class="inp flex-1" placeholder="Search inventory..." oninput="render()" style="min-width:180px">
+      <button id="lowBtn" onclick="toggleLowStock()" class="filter-btn">⚠ Low Stock Only</button>
+    </div>
+
+    <!-- List -->
+    <div id="inventoryList" class="card overflow-hidden no-print">
+      <div class="text-center py-12 text-white/30">Loading...</div>
+    </div>
+
+    <!-- Print Area (hidden until print) -->
+    <div id="printArea" style="display:none">
+      <div style="margin-bottom:16px">
+        <h1 style="font-size:22px;font-weight:900;color:#4c1d95;margin:0">Quality Muffler — Inventory</h1>
+        <p style="color:#666;font-size:12px;margin:4px 0 0">Printed: <span id="printDate"></span></p>
+      </div>
+      <table class="print-table" id="printTable"></table>
+    </div>
+  </div>
+
+  <!-- Add/Edit Modal -->
+  <div id="modal" class="modal-bg hidden">
+    <div class="modal">
+      <h2 id="modalTitle" class="text-xl font-black lavender mb-5">Add Item</h2>
+      <input id="editId" type="hidden">
+      <div class="grid grid-cols-2 gap-3 mb-3">
+        <div class="col-span-2">
+          <label>Item Name *</label>
+          <input id="fName" type="text" class="inp" placeholder='e.g. 3" Inlet Muffler'>
+        </div>
+        <div class="col-span-2">
+          <label>Part Number</label>
+          <input id="fPartNumber" type="text" class="inp" placeholder="e.g. MF-3842">
+        </div>
+        <div>
+          <label>Category *</label>
+          <select id="fCategory" class="inp">
+            <option value="">Select...</option>
+            <option>muffler</option>
+            <option>CAT</option>
+            <option>tubing</option>
+            <option>tip</option>
+            <option>gasket</option>
+            <option>flange</option>
+            <option>hanger</option>
+            <option>bolt</option>
+            <option>washer</option>
+            <option>nut</option>
+            <option>welding rod</option>
+            <option>blade</option>
+            <option>glove</option>
+            <option>other</option>
+          </select>
+        </div>
+        <div>
+          <label>Unit</label>
+          <select id="fUnit" class="inp">
+            <option>each</option>
+            <option>pair</option>
+            <option>box</option>
+            <option>roll</option>
+            <option>pack</option>
+            <option>foot</option>
+          </select>
+        </div>
+        <div>
+          <label>Quantity</label>
+          <input id="fQty" type="number" class="inp" placeholder="0" min="0">
+        </div>
+        <div>
+          <label>Price ($)</label>
+          <input id="fPrice" type="number" class="inp" placeholder="Leave blank = call" step="0.01" min="0">
+        </div>
+        <div class="col-span-2">
+          <label>Notes (optional)</label>
+          <input id="fNotes" type="text" class="inp" placeholder="e.g. fits most V6 applications">
+        </div>
+      </div>
+      <div id="modalErr" class="text-red-400 text-xs mb-3 hidden"></div>
+      <div class="flex gap-3 mt-4">
+        <button onclick="saveItem()" class="btn-lav flex-1">Save</button>
+        <button onclick="closeModal()" class="btn-edit flex-1">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Deduct Modal -->
+  <div id="deductModal" class="modal-bg hidden">
+    <div class="modal" style="max-width:320px">
+      <h2 class="text-lg font-black lavender mb-1">Use Stock</h2>
+      <p id="deductName" class="text-white/50 text-sm mb-4"></p>
+      <input id="deductId" type="hidden">
+      <label>Units Used</label>
+      <input id="deductQty" type="number" class="inp mb-4" placeholder="e.g. 2" min="1" onkeydown="if(event.key==='Enter')confirmDeduct()">
+      <div id="deductErr" class="text-red-400 text-xs mb-3 hidden">Enter a valid quantity.</div>
+      <div class="flex gap-3">
+        <button onclick="confirmDeduct()" class="flex-1 py-2.5 font-bold rounded-xl border cursor-pointer transition-all" style="background:rgba(251,191,36,0.15);border-color:rgba(251,191,36,0.4);color:#fde68a;">− Remove Stock</button>
+        <button onclick="closeDeduct()" class="btn-edit flex-1">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Restock Modal -->
+  <div id="restockModal" class="modal-bg hidden">
+    <div class="modal" style="max-width:320px">
+      <h2 class="text-lg font-black lavender mb-1">Restock</h2>
+      <p id="restockName" class="text-white/50 text-sm mb-4"></p>
+      <input id="restockId" type="hidden">
+      <label>Units Received</label>
+      <input id="restockQty" type="number" class="inp mb-4" placeholder="e.g. 10" min="1" onkeydown="if(event.key==='Enter')confirmRestock()">
+      <div id="restockErr" class="text-red-400 text-xs mb-3 hidden">Enter a valid quantity.</div>
+      <div class="flex gap-3">
+        <button onclick="confirmRestock()" class="btn-restock flex-1 py-2.5">+ Add Stock</button>
+        <button onclick="closeRestock()" class="btn-edit flex-1">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    emailjs.init('8ChLYGR5sp4PMcuN5');
+
+    const PASS = 'QM2026';
+    const { createClient } = supabase;
+    const sb = createClient(
+      'https://wztnfxwenipogdpyazrd.supabase.co',
+      'sb_publishable_9FvqtLDyx8Am4FK-px4ioA_O_pXiEB6'
+    );
+
+    let items = [];
+    let showLowOnly = false;
+
+    function login() {
+      if (document.getElementById('pwInput').value === PASS) {
+        document.getElementById('loginScreen').style.display = 'none';
+        document.getElementById('mainScreen').style.display = 'block';
+        loadItems();
+      } else {
+        document.getElementById('pwErr').classList.remove('hidden');
+        document.getElementById('pwInput').value = '';
+      }
+    }
+
+    function logout() {
+      document.getElementById('loginScreen').style.display = 'flex';
+      document.getElementById('mainScreen').style.display = 'none';
+      document.getElementById('pwInput').value = '';
+    }
+
+    async function loadItems() {
+      const { data } = await sb.from('inventory').select('*').order('category').order('name');
+      items = data || [];
+      updateStats();
+      render();
+    }
+
+    function updateStats() {
+      document.getElementById('statTotal').textContent = items.length;
+      document.getElementById('statLow').textContent = items.filter(i => i.quantity <= 2).length;
+    }
+
+    function toggleLowStock() {
+      showLowOnly = !showLowOnly;
+      document.getElementById('lowBtn').classList.toggle('active', showLowOnly);
+      render();
+    }
+
+    function render() {
+      const q = document.getElementById('search').value.toLowerCase();
+      let filtered = q ? items.filter(i => i.name.toLowerCase().includes(q) || i.category.toLowerCase().includes(q)) : items;
+      if (showLowOnly) filtered = filtered.filter(i => i.quantity <= 2);
+      const el = document.getElementById('inventoryList');
+      if (!filtered.length) {
+        el.innerHTML = '<div class="text-center py-10 text-white/30 text-sm">No items found.</div>';
+        return;
+      }
+      el.innerHTML = filtered.map(item => `
+        <div class="item-row">
+          <div class="flex-1 min-w-0">
+            <div class="font-semibold text-white text-sm">${item.name}</div>
+            <div class="text-white/35 text-xs">${item.category}${item.part_number ? ' · #' + item.part_number : ''} · <span class="${item.quantity <= 1 ? 'text-red-400 font-bold' : item.quantity <= 2 ? 'text-yellow-400 font-bold' : 'text-white/35'}">${item.quantity} ${item.unit}</span></div>
+            ${item.notes ? `<div class="text-white/25 text-xs mt-0.5 italic">${item.notes}</div>` : ''}
+          </div>
+          <div class="text-right text-sm mr-1">
+            <div class="lavender font-bold">${item.price != null ? '$' + Number(item.price).toFixed(2) : '—'}</div>
+          </div>
+          <div class="flex gap-1.5">
+            <button class="btn-restock" onclick="openRestock('${item.id}', ${JSON.stringify(item.name).replace(/"/g, '&quot;')}, ${item.quantity})">+</button>
+            <button class="btn-danger" style="background:rgba(251,191,36,0.15);border-color:rgba(251,191,36,0.4);color:#fde68a;" onclick="openDeduct('${item.id}', ${JSON.stringify(item.name).replace(/"/g, '&quot;')}, ${item.quantity})">−</button>
+            <button class="btn-edit" onclick="openEdit(${JSON.stringify(item).replace(/"/g, '&quot;')})">Edit</button>
+            <button class="btn-danger" onclick="deleteItem('${item.id}')">Del</button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    // Add/Edit Modal
+    function openAdd() {
+      document.getElementById('modalTitle').textContent = 'Add Item';
+      document.getElementById('editId').value = '';
+      document.getElementById('fName').value = '';
+      document.getElementById('fCategory').value = '';
+      document.getElementById('fUnit').value = 'each';
+      document.getElementById('fQty').value = '';
+      document.getElementById('fPrice').value = '';
+      document.getElementById('fPartNumber').value = '';
+      document.getElementById('fNotes').value = '';
+      document.getElementById('modalErr').classList.add('hidden');
+      document.getElementById('modal').classList.remove('hidden');
+    }
+
+    function openEdit(item) {
+      document.getElementById('modalTitle').textContent = 'Edit Item';
+      document.getElementById('editId').value = item.id;
+      document.getElementById('fName').value = item.name;
+      document.getElementById('fCategory').value = item.category;
+      document.getElementById('fUnit').value = item.unit;
+      document.getElementById('fQty').value = item.quantity;
+      document.getElementById('fPrice').value = item.price ?? '';
+      document.getElementById('fPartNumber').value = item.part_number ?? '';
+      document.getElementById('fNotes').value = item.notes ?? '';
+      document.getElementById('modalErr').classList.add('hidden');
+      document.getElementById('modal').classList.remove('hidden');
+    }
+
+    function closeModal() { document.getElementById('modal').classList.add('hidden'); }
+
+    async function saveItem() {
+      const name = document.getElementById('fName').value.trim();
+      const category = document.getElementById('fCategory').value;
+      if (!name || !category) {
+        const err = document.getElementById('modalErr');
+        err.textContent = 'Name and category are required.';
+        err.classList.remove('hidden');
+        return;
+      }
+      const payload = {
+        name, category,
+        unit: document.getElementById('fUnit').value,
+        quantity: parseInt(document.getElementById('fQty').value) || 0,
+        price: document.getElementById('fPrice').value !== '' ? parseFloat(document.getElementById('fPrice').value) : null,
+        part_number: document.getElementById('fPartNumber').value.trim() || null,
+        notes: document.getElementById('fNotes').value.trim() || null,
+      };
+      const id = document.getElementById('editId').value;
+      if (id) {
+        await sb.from('inventory').update(payload).eq('id', id);
+      } else {
+        await sb.from('inventory').insert(payload);
+      }
+      if (payload.quantity <= 2) sendStockAlert(payload.name, payload.category, payload.part_number, payload.quantity);
+      closeModal();
+      loadItems();
+    }
+
+    // Deduct Modal
+    function openDeduct(id, name, currentQty) {
+      document.getElementById('deductId').value = id;
+      document.getElementById('deductName').textContent = name + ' — currently ' + currentQty + ' in stock';
+      document.getElementById('deductQty').value = '';
+      document.getElementById('deductErr').classList.add('hidden');
+      document.getElementById('deductModal').classList.remove('hidden');
+      setTimeout(() => document.getElementById('deductQty').focus(), 100);
+    }
+
+    function closeDeduct() { document.getElementById('deductModal').classList.add('hidden'); }
+
+    async function confirmDeduct() {
+      const remove = parseInt(document.getElementById('deductQty').value);
+      if (!remove || remove < 1) { document.getElementById('deductErr').classList.remove('hidden'); return; }
+      const id = document.getElementById('deductId').value;
+      const item = items.find(i => i.id === id);
+      const newQty = Math.max(0, (item.quantity || 0) - remove);
+      await sb.from('inventory').update({ quantity: newQty }).eq('id', id);
+      if (newQty <= 2) sendStockAlert(item.name, item.category, item.part_number, newQty);
+      closeDeduct();
+      loadItems();
+    }
+
+    // Restock Modal
+    function openRestock(id, name, currentQty) {
+      document.getElementById('restockId').value = id;
+      document.getElementById('restockName').textContent = name + ' — currently ' + currentQty + ' in stock';
+      document.getElementById('restockQty').value = '';
+      document.getElementById('restockErr').classList.add('hidden');
+      document.getElementById('restockModal').classList.remove('hidden');
+      setTimeout(() => document.getElementById('restockQty').focus(), 100);
+    }
+
+    function closeRestock() { document.getElementById('restockModal').classList.add('hidden'); }
+
+    async function confirmRestock() {
+      const add = parseInt(document.getElementById('restockQty').value);
+      if (!add || add < 1) { document.getElementById('restockErr').classList.remove('hidden'); return; }
+      const id = document.getElementById('restockId').value;
+      const item = items.find(i => i.id === id);
+      const newQty = (item.quantity || 0) + add;
+      await sb.from('inventory').update({ quantity: newQty }).eq('id', id);
+      closeRestock();
+      loadItems();
+    }
+
+    // Email alerts
+    function sendStockAlert(name, category, part_number, quantity) {
+      const messages = {
+        2: '⚠️ Stock is getting low. Consider reordering soon to avoid running out.',
+        1: '🚨 URGENT: Only 1 unit remaining. Reorder immediately to avoid a stockout.'
+      };
+      if (!messages[quantity]) return;
+      emailjs.send('service_5hf9atx', 'template_w03dhay', {
+        item_name: name,
+        item_category: category,
+        item_part_number: part_number || 'N/A',
+        item_quantity: quantity,
+        alert_message: messages[quantity],
+        to_email: 'qualitymufflervisalia@gmail.com'
+      });
+    }
+
+    async function deleteItem(id) {
+      if (!confirm('Delete this item?')) return;
+      await sb.from('inventory').delete().eq('id', id);
+      loadItems();
+    }
+
+    // Print
+    function printInventory() {
+      document.getElementById('printDate').textContent = new Date().toLocaleDateString();
+      const sorted = [...items].sort((a, b) => a.category.localeCompare(b.category) || a.name.localeCompare(b.name));
+      document.getElementById('printTable').innerHTML = `
+        <thead>
+          <tr>
+            <th>Item</th>
+            <th>Part #</th>
+            <th>Category</th>
+            <th>Qty</th>
+            <th>Unit</th>
+            <th>Price</th>
+            <th>Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${sorted.map(i => `
+            <tr>
+              <td>${i.name}</td>
+              <td>${i.part_number || '—'}</td>
+              <td>${i.category}</td>
+              <td class="${i.quantity <= 2 ? 'low-print' : ''}">${i.quantity}</td>
+              <td>${i.unit}</td>
+              <td>${i.price != null ? '$' + Number(i.price).toFixed(2) : '—'}</td>
+              <td>${i.notes || ''}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      `;
+      window.print();
+    }
+
+    // Close modals on backdrop click
+    document.getElementById('modal').addEventListener('click', e => { if (e.target === document.getElementById('modal')) closeModal(); });
+    document.getElementById('restockModal').addEventListener('click', e => { if (e.target === document.getElementById('restockModal')) closeRestock(); });
+    document.getElementById('deductModal').addEventListener('click', e => { if (e.target === document.getElementById('deductModal')) closeDeduct(); });
+  </script>
+</body>
+</html>
