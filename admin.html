@@ -6,7 +6,6 @@
   <title>Admin — Quality Muffler</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
   <style>
     * { box-sizing: border-box; }
     body { background: #0a0a0a; color: white; font-family: 'Segoe UI', system-ui, sans-serif; margin: 0; min-height: 100vh; }
@@ -166,6 +165,14 @@
           <label>Price ($)</label>
           <input id="fPrice" type="number" class="inp" placeholder="Leave blank = call" step="0.01" min="0">
         </div>
+        <div>
+          <label>Low Stock Alert At</label>
+          <input id="fLowThreshold" type="number" class="inp" placeholder="2" min="0">
+        </div>
+        <div>
+          <label>Urgent Alert At</label>
+          <input id="fUrgentThreshold" type="number" class="inp" placeholder="1" min="0">
+        </div>
         <div class="col-span-2">
           <label>Notes (optional)</label>
           <input id="fNotes" type="text" class="inp" placeholder="e.g. fits most V6 applications">
@@ -212,8 +219,6 @@
   </div>
 
   <script>
-    emailjs.init('8ChLYGR5sp4PMcuN5');
-
     const PASS = 'QM2026';
     const { createClient } = supabase;
     const sb = createClient(
@@ -250,7 +255,7 @@
 
     function updateStats() {
       document.getElementById('statTotal').textContent = items.length;
-      document.getElementById('statLow').textContent = items.filter(i => i.quantity <= 2).length;
+      document.getElementById('statLow').textContent = items.filter(i => i.quantity <= (i.low_threshold ?? 2)).length;
     }
 
     function toggleLowStock() {
@@ -260,9 +265,9 @@
     }
 
     function render() {
-      const q = document.getElementById('search').value.toLowerCase();
-      let filtered = q ? items.filter(i => i.name.toLowerCase().includes(q) || i.category.toLowerCase().includes(q)) : items;
-      if (showLowOnly) filtered = filtered.filter(i => i.quantity <= 2);
+      const q = document.getElementById('search').value.toLowerCase().replace(/^#/, '');
+      let filtered = q ? items.filter(i => i.name.toLowerCase().includes(q) || i.category.toLowerCase().includes(q) || (i.part_number && i.part_number.toLowerCase().includes(q))) : items;
+      if (showLowOnly) filtered = filtered.filter(i => i.quantity <= (i.low_threshold ?? 2));
       const el = document.getElementById('inventoryList');
       if (!filtered.length) {
         el.innerHTML = '<div class="text-center py-10 text-white/30 text-sm">No items found.</div>';
@@ -272,7 +277,7 @@
         <div class="item-row">
           <div class="flex-1 min-w-0">
             <div class="font-semibold text-white text-sm">${item.name}</div>
-            <div class="text-white/35 text-xs">${item.category}${item.part_number ? ' · #' + item.part_number : ''} · <span class="${item.quantity <= 1 ? 'text-red-400 font-bold' : item.quantity <= 2 ? 'text-yellow-400 font-bold' : 'text-white/35'}">${item.quantity} ${item.unit}</span></div>
+            <div class="text-white/35 text-xs">${item.category}${item.part_number ? ' · #' + item.part_number : ''} · <span class="${item.quantity <= (item.urgent_threshold ?? 1) ? 'text-red-400 font-bold' : item.quantity <= (item.low_threshold ?? 2) ? 'text-yellow-400 font-bold' : 'text-white/35'}">${item.quantity} ${item.unit}</span></div>
             ${item.notes ? `<div class="text-white/25 text-xs mt-0.5 italic">${item.notes}</div>` : ''}
           </div>
           <div class="text-right text-sm mr-1">
@@ -299,6 +304,8 @@
       document.getElementById('fPrice').value = '';
       document.getElementById('fPartNumber').value = '';
       document.getElementById('fNotes').value = '';
+      document.getElementById('fLowThreshold').value = '2';
+      document.getElementById('fUrgentThreshold').value = '1';
       document.getElementById('modalErr').classList.add('hidden');
       document.getElementById('modal').classList.remove('hidden');
     }
@@ -313,6 +320,8 @@
       document.getElementById('fPrice').value = item.price ?? '';
       document.getElementById('fPartNumber').value = item.part_number ?? '';
       document.getElementById('fNotes').value = item.notes ?? '';
+      document.getElementById('fLowThreshold').value = item.low_threshold ?? 2;
+      document.getElementById('fUrgentThreshold').value = item.urgent_threshold ?? 1;
       document.getElementById('modalErr').classList.add('hidden');
       document.getElementById('modal').classList.remove('hidden');
     }
@@ -335,6 +344,8 @@
         price: document.getElementById('fPrice').value !== '' ? parseFloat(document.getElementById('fPrice').value) : null,
         part_number: document.getElementById('fPartNumber').value.trim() || null,
         notes: document.getElementById('fNotes').value.trim() || null,
+        low_threshold: parseInt(document.getElementById('fLowThreshold').value) ?? 2,
+        urgent_threshold: parseInt(document.getElementById('fUrgentThreshold').value) ?? 1,
       };
       const id = document.getElementById('editId').value;
       if (id) {
@@ -342,7 +353,6 @@
       } else {
         await sb.from('inventory').insert(payload);
       }
-      if (payload.quantity <= 2) sendStockAlert(payload.name, payload.category, payload.part_number, payload.quantity);
       closeModal();
       loadItems();
     }
@@ -366,7 +376,7 @@
       const item = items.find(i => i.id === id);
       const newQty = Math.max(0, (item.quantity || 0) - remove);
       await sb.from('inventory').update({ quantity: newQty }).eq('id', id);
-      if (newQty <= 2) sendStockAlert(item.name, item.category, item.part_number, newQty);
+      if (newQty <= (item.low_threshold ?? 2)) sendStockAlert(item.name, item.category, item.part_number, newQty, item.low_threshold ?? 2, item.urgent_threshold ?? 1);
       closeDeduct();
       loadItems();
     }
@@ -395,20 +405,30 @@
     }
 
     // Email alerts
-    function sendStockAlert(name, category, part_number, quantity) {
-      const messages = {
-        2: '⚠️ Stock is getting low. Consider reordering soon to avoid running out.',
-        1: '🚨 URGENT: Only 1 unit remaining. Reorder immediately to avoid a stockout.'
-      };
-      if (!messages[quantity]) return;
-      emailjs.send('service_5hf9atx', 'template_w03dhay', {
-        item_name: name,
-        item_category: category,
-        item_part_number: part_number || 'N/A',
-        item_quantity: quantity,
-        alert_message: messages[quantity],
-        to_email: 'qualitymufflervisalia@gmail.com'
-      });
+    function sendStockAlert(name, category, part_number, quantity, lowThreshold = 2, urgentThreshold = 1) {
+      const isUrgent = quantity <= urgentThreshold;
+      const isLow = quantity <= lowThreshold;
+      if (!isLow) return;
+      const subject = isUrgent
+        ? `🚨 URGENT: ${name} — Only ${quantity} left in stock`
+        : `⚠️ Low Stock: ${name} — ${quantity} remaining`;
+      const body = `
+        <div style="font-family:sans-serif;max-width:480px;padding:24px;">
+          <h2 style="margin-bottom:4px;">${isUrgent ? '🚨 Urgent Stock Alert' : '⚠️ Low Stock Alert'}</h2>
+          <p style="color:#555;margin-bottom:20px;">Quality Muffler — Inventory System</p>
+          <div style="background:#f4f4f5;border-radius:12px;padding:16px 20px;">
+            <p style="margin:6px 0;"><strong>Item:</strong> ${name}</p>
+            <p style="margin:6px 0;"><strong>Category:</strong> ${category}</p>
+            <p style="margin:6px 0;"><strong>Part Number:</strong> ${part_number || 'N/A'}</p>
+            <p style="margin:6px 0;"><strong>Quantity Remaining:</strong> <span style="color:${isUrgent ? '#dc2626' : '#d97706'};font-weight:700;">${quantity}</span></p>
+          </div>
+          <p style="color:#666;font-size:14px;margin-top:20px;">${isUrgent ? '🚨 URGENT: Reorder immediately to avoid a stockout.' : '⚠️ Stock is getting low. Consider reordering soon.'}</p>
+        </div>`;
+      fetch('/.netlify/functions/send-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ to: 'qualitymufflervisalia@gmail.com', subject, body })
+      }).catch(err => console.warn('Email send failed:', err));
     }
 
     async function deleteItem(id) {
@@ -439,7 +459,7 @@
               <td>${i.name}</td>
               <td>${i.part_number || '—'}</td>
               <td>${i.category}</td>
-              <td class="${i.quantity <= 2 ? 'low-print' : ''}">${i.quantity}</td>
+              <td class="${i.quantity <= (i.low_threshold ?? 2) ? 'low-print' : ''}">${i.quantity}</td>
               <td>${i.unit}</td>
               <td>${i.price != null ? '$' + Number(i.price).toFixed(2) : '—'}</td>
               <td>${i.notes || ''}</td>
